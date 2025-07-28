@@ -1,0 +1,11 @@
+# 🧠 Step: 01_case_study - Performing a pocket volume plot
+
+## 📌 Objective
+To perform a pocket volume plot.
+
+## 🧾 Description
+- **Inputs**: /home/alex/Documents/pocket_tool/data/gpcrmd_sims/glr_5ee7_apo/apo/pockets_dyn815_traj15876/pocket_10_volumes.csv -> CSV containing the volume of the pocket per ns
+- **Outputs**: /home/alex/Documents/pocket_tool/docs/figures/raw/volume_vs_time_gln_815_15876.svg -> A line plot with the volume
+
+## ⚙️ How to Run
+Is a jupyter notebook. Just open it and run the cells inside.
