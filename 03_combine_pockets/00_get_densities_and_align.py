@@ -1,8 +1,25 @@
 """
-This script aligns the GPCR structures to a reference structure using Chimera,
-transforms the density files, and saves the results in a CSV file.
+This script processes GPCRmd data to align protein structures to a reference GPCR structure 
+and transform density files. It performs the following steps:
+1. Retrieves a list of dynIDs with precomputed pockets from the GPCRmd database.
+2. Reads GPCRmd data from a JSON file and extracts relevant information for each dynID.
+3. Aligns protein structures to a reference GPCR structure using Chimera, generating 
+    rotation matrices and translation vectors.
+4. Transforms density files (DX format) using the computed transformation matrices.
+5. Saves the results, including aligned PDB files, transformed DX files, and metadata, 
+    to specified directories and a CSV file.
+Global Variables:
+- ROOT_GPCRMD: Path to the root directory containing GPCRmd data.
+- TMP_DIR: Path to the temporary directory for storing intermediate files.
+- RESULTS_DIR: Path to the directory where results will be saved.
+- TM_RESIDS_REF: Residue selection string for the reference GPCR structure.
+- COMPL_INFO_PATH: Path to the JSON file containing GPCRmd data.
+Execution:
+- The script processes dynIDs within a specified range (from_index to to_index) provided as 
+  command-line arguments.
+- It aligns protein structures, transforms density files, and saves results to the output 
+  directories and a CSV file.
 """
-
 
 # Imports.
 import os
@@ -10,23 +27,21 @@ import sys
 import json
 import uuid
 import subprocess
-import copy
 import requests
 
 import numpy as np
-import pandas as pd
 
 from dx_reader import read_dx_file, write_dx, apply_transformation_to_dx
 
 
-# Paths local.
+# Paths to run locally.
 # ROOT_GPCRMD = "/files_gpcrmd"
 # TMP_DIR = "/home/alex/Desktop"
 # REFERENCE_GPCR = "/home/alex/Desktop/static/reference_gpcr/a2a_6gdg_opm_rotated.pdb"
 # CHIMERA = "/home/alex/.local/UCSF-Chimera64-1.17.3/bin/chimera"
 # RESULTS_DIR = '/home/alex/Desktop/dx_transformation/00_aligning_and_transforming'
 
-# Paths cluster.
+# Paths to run in cluster.
 ROOT_GPCRMD = "/files_gpcrmd"
 TMP_DIR = "/home/aperalta/Desktop"
 REFERENCE_GPCR = "/home/aperalta/combine_pockets/a2a_6gdg_opm_rotated.pdb"
@@ -111,7 +126,8 @@ def request_gpcrmd(dynid):
     if response.status_code == 200:
         return response.json()
     else:
-        raise Exception(f"Error fetching data for dynid {dynid}: {response.status_code}")
+        print(f"[ERROR] Error fetching data for dynid {dynid}: {response.status_code}")
+        return None
 
 
 def align_and_get_rotation_maxtrix(target_pdb, tm_resids_target_sel):
@@ -294,14 +310,21 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(os.path.join(RESULTS_DIR, "aligned_pdbs"), exist_ok=True)
 os.makedirs(os.path.join(RESULTS_DIR, "dx_files"), exist_ok=True)
 
-# 1. GETTING FILE PATHS AND SELECTIONS AND REQUESTING.
-print("[PROGRESS] Getting file paths, making request and taking selections...")
+# Output file paths.
+csv_filepath = os.path.join(RESULTS_DIR, f"results_{str(from_index)}_{str(to_index)}.csv")
+log_filepath = os.path.join(RESULTS_DIR, f"log_{str(from_index)}_{str(to_index)}.txt")
+log_fh = open(log_filepath, 'w')
+
+# 1. GETTING FILE PATHS, SELECTIONS, ETC.
+print("[*] Getting file paths, making request and taking selections...", file=log_fh)
 dynids_results = []
 for index, dynid in enumerate(target_dynids[from_index:to_index]):
-    print(f"[PROGRESS] Processing dynID {dynid} ({index + 1}/{len(target_dynids)})...")
+    print(f"[*] Processing dynID {dynid} ({index + 1}/{len(target_dynids)})...", file=log_fh)
+
+    # Check if the dynid is in the compl_info dictionary.
     entry_data = compl_info.get(f'dyn{str(dynid)}', None)
     if entry_data is None:
-        print(f"[ERROR] Entry for dynID {dynid} not found in compl_info.")
+        print(f"[ERROR] Entry for dynID {dynid} not found in compl_info.", file=log_fh)
         continue
 
     # Get the PDB path for the structure.
@@ -326,9 +349,6 @@ for index, dynid in enumerate(target_dynids[from_index:to_index]):
         )
 
         trajid_results.append({
-            'dynid': dynid, # delete
-            'pdb_path': pdb_path, # delete
-            'tm_resids_sel': tm_resids_sel, # delete
             'trajid': trajid,
             'traj_path': trajfile,
             'pockets_freq_file': pockets_freq_file
@@ -337,86 +357,101 @@ for index, dynid in enumerate(target_dynids[from_index:to_index]):
     # Get additional info from GPCRdb for the CSV file.
     request_result = request_gpcrmd(dynid)
     if request_result == []:
-        print(f"[ERROR] No data found for dynID {dynid} in GPCRmd.")
+        print(f"[ERROR] No data found for dynID {dynid} in GPCRmd.", file=log_fh)
+        continue
+    if request_result == None:
+        print(f"[ERROR] Error fetching data for dynid {dynid}. Try again later.", file=log_fh)
         continue
     gpcrmd_data = request_result[0]
 
+    # Save dynid data to the dynids_results list.
     dynids_results.append({
         'dynid': dynid,
         'pdb_path': pdb_path,
-        'is_apoform': [ True if entry_data['lig_lname'] or entry_data['lig_sname'] else False ],
+        'is_apoform': True if entry_data['lig_lname'] or entry_data['lig_sname'] else False,
         'tm_resids_sel': tm_resids_sel,
         'gpcrmd_data': gpcrmd_data,
         'trajid_results': trajid_results
     })
 
 # 2. ALIGNING AND TRANSFORMING THE DENSITY FILES.
-print("[PROGRESS] Aligning and transforming the density files...")
-
-csv_results = { key: [] for key in 
-    ["dynid", "trajid", "uniprotid", "uniprot_name", "protein_name",
-    "pdb_code", "class_name", "state", "species", "family_slug", "family_name",
-     "model_name", "is_apoform", "rmsd_to_ref", "tm_resids_sel", "pdb_path",
-     "aligned_pdb_path", "pockets_freq_file", "new_dx_file_path",
-     "rotation_matrix", "translation_vector"] }
+print("[*] Aligning and transforming the density files...", file=log_fh)
 
 for index, dynid_result in enumerate(dynids_results):
-    print(f"[PROGRESS] Processing dynID {dynid} ({index + 1}/{len(target_dynids)})...")
+    print(f"[*] Processing dynID {dynid} ({index + 1}/{len(target_dynids)})...", file=log_fh)
     dynid = dynid_result['dynid']
     pdb_path = dynid_result['pdb_path']
     tm_resids_sel = dynid_result['tm_resids_sel']
+    is_apoform = dynid_result['is_apoform']
     gpcrmd_data = dynid_result['gpcrmd_data']
 
     # Align the first frame of the trajectory to the reference GPCR.
-    rotation_matrix, translation_vector, rmsd, aligned_pdb_path = \
-        align_and_get_rotation_maxtrix(pdb_path, tm_resids_sel)
+    try:
+        rotation_matrix, translation_vector, rmsd, aligned_pdb_path = \
+            align_and_get_rotation_maxtrix(pdb_path, tm_resids_sel)
+    except FileNotFoundError as e:
+        print(f"[ERROR] PDB file for dynid {dynid} not found", file=log_fh)
 
     # For each trajectory, transform the DX file.
     for trajid_result in dynid_result['trajid_results']:
         trajid = trajid_result['trajid']
         pockets_freq_file = trajid_result['pockets_freq_file']
         
-        # Read, transform, and write the dx file
+        # Read the dx file.
+        dx_data = read_dx_file(pockets_freq_file)
+
+        # Transform the dx file.
+        dx_data_transformed = apply_transformation_to_dx(
+            dx_data, rotation_matrix, translation_vector)
+        
+        # Write the transformed dx file.
         new_df_file_basename = os.path.basename(
             pockets_freq_file.replace(".dx", f"_{dynid}_{trajid}_aligned.dx"))
-        new_dx_file_path = os.path.join(RESULTS_DIR, "dx_files", new_df_file_basename)
+        new_dx_file_path = os.path.join(RESULTS_DIR,
+                                        "dx_files", new_df_file_basename)
 
-        dx_data = read_dx_file(pockets_freq_file)
-        dx_data_transformed = apply_transformation_to_dx(dx_data, rotation_matrix, translation_vector)
-        write_dx(new_dx_file_path, dx_data_transformed['origin'],
-            dx_data_transformed['deltas'], dx_data_transformed['counts'],
-            np.array(dx_data_transformed['scalars']).reshape(dx_data_transformed['counts']),
-            title="DX file transformed to aligned reference GPCR",)
+        write_dx(
+            filename=new_dx_file_path,
+            origin=dx_data_transformed['origin'],
+            deltas=dx_data_transformed['deltas'],
+            counts=dx_data_transformed['counts'],
+            data=np.array(dx_data_transformed['scalars']).reshape(dx_data_transformed['counts']),
+            title="DX file transformed to aligned reference GPCR")
 
         # Save the results to the CSV file.
-        csv_results["dynid"].append(dynid)
-        csv_results["trajid"].append(trajid)
-        csv_results["uniprotid"].append(gpcrmd_data['uniprot'])
-        csv_results["uniprot_name"].append(gpcrmd_data['uprot_entry'])
-        csv_results["protein_name"].append(gpcrmd_data['protname'])
-        csv_results["pdb_code"].append(gpcrmd_data['pdb_namechain'])
-        csv_results["class_name"].append(gpcrmd_data['class_name'])
+        csv_results = {}
+        csv_results["dynid"] = dynid
+        csv_results["trajid"] = trajid
+        csv_results["uniprotid"] = gpcrmd_data['uniprot']
+        csv_results["uniprot_name"] = gpcrmd_data['uprot_entry']
+        csv_results["protein_name"] = gpcrmd_data['protname']
+        csv_results["pdb_code"] = gpcrmd_data['pdb_namechain']
+        csv_results["class_name"] = gpcrmd_data['class_name']
         try:
-            csv_results["state"].append(gpcrmd_data['state'][0]['name'])
+            csv_results["state"] = gpcrmd_data['state'][0]['name']
         except IndexError as e:
-            print(f"[WARNING] No state found for dynID {dynid}: {e}")
-            csv_results["state"].append(None)
-        csv_results["species"].append(gpcrmd_data['species'])
-        csv_results["family_slug"].append(gpcrmd_data['fam_slug'])
-        csv_results["family_name"].append(gpcrmd_data['fam_name'])
-        csv_results["model_name"].append(gpcrmd_data['modelname'])
-        csv_results["is_apoform"].append(
-            [ True if entry_data['lig_lname'] or entry_data['lig_sname'] else False ])
-        csv_results["rmsd_to_ref"].append(rmsd)
-        csv_results["tm_resids_sel"].append(tm_resids_sel)
-        csv_results["pdb_path"].append(pdb_path)
-        csv_results["aligned_pdb_path"].append(aligned_pdb_path)
-        csv_results["pockets_freq_file"].append(pockets_freq_file)
-        csv_results["new_dx_file_path"].append(new_dx_file_path)
-        csv_results["rotation_matrix"].append(rotation_matrix)
-        csv_results["translation_vector"].append(translation_vector)
+            print(f"[WARNING] No state found for dynID {dynid}: {e}", file=log_fh)
+            csv_results["state"] = None
+        csv_results["species"] = gpcrmd_data['species']
+        csv_results["family_slug"] = gpcrmd_data['fam_slug']
+        csv_results["family_name"] = gpcrmd_data['fam_name']
+        csv_results["model_name"] = gpcrmd_data['modelname']
+        csv_results["is_apoform"] = is_apoform
+        csv_results["rmsd_to_ref"] = rmsd
+        csv_results["tm_resids_sel"] = tm_resids_sel
+        csv_results["pdb_path"] = pdb_path
+        csv_results["aligned_pdb_path"] = aligned_pdb_path
+        csv_results["pockets_freq_file"] = pockets_freq_file
+        csv_results["new_dx_file_path"] = new_dx_file_path
+        csv_results["rotation_matrix"] = rotation_matrix
+        csv_results["translation_vector"] = translation_vector
 
-# Write the CSV file.
-csv_filepath = os.path.join(RESULTS_DIR, f"results_{str(from_index)}_{str(to_index)}.csv")
-pd.DataFrame(csv_results).to_csv(
-    csv_filepath, index=False, mode='w', header=True)
+        # Print the values in "csv_results" to the console separated by commas
+        with open(csv_filepath, 'a') as f:
+            # Check if the file is empty. If it is, write the header.
+            if os.stat(csv_filepath).st_size == 0:
+                f.write(";".join(csv_results.keys()) + "\n")
+            # Write the values.
+            f.write(";".join([ str(value) for key, value in csv_results.items() ]) + "\n")
+
+log_fh.close()

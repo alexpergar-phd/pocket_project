@@ -2,7 +2,6 @@
 """
 
 
-import os
 import numpy as np
 import copy
 
@@ -10,6 +9,33 @@ from scipy.interpolate import RegularGridInterpolator
 
 
 def read_dx_file(filepath):
+    """
+    Reads a DX (Data Explorer) file and extracts its grid metadata and scalar data.
+    Parameters:
+    -----------
+    filepath : str
+        The path to the DX file to be read.
+    Returns:
+    --------
+    dict
+        A dictionary containing the following keys:
+        - 'counts' : list of int
+            The grid dimensions (number of points along each axis).
+        - 'origin' : list of float
+            The origin of the grid in 3D space.
+        - 'deltas' : list of list of float
+            The grid spacing vectors along the x, y, and z axes.
+        - 'scalars' : list of float
+            The scalar data values from the DX file.
+        - 'header' : list of str
+            The header lines from the DX file, including metadata.
+    Notes:
+    ------
+    - The function assumes the DX file follows a specific format with "object",
+      "origin", "delta", and "class array" keywords.
+    - The scalar data is extracted as a flat list of floats.
+    """
+
     with open(filepath, 'r') as f:
         lines = f.readlines()
 
@@ -83,6 +109,26 @@ def write_dx(filename, origin, deltas, counts, data, title="density"):
 
 def apply_transformation_to_dx(dx_data, rotation_matrix, translation_vector):
     """
+    Applies a geometric transformation to the given DX data using a rotation matrix 
+    and a translation vector.
+    This function modifies the origin and deltas of the DX data by applying the 
+    specified rotation and translation. The transformation is applied as follows:
+    - The origin is rotated and then translated.
+    - Each delta vector (x, y, z) is rotated.
+    Parameters:
+        dx_data (dict): A dictionary containing the DX data. It must include the keys:
+            - 'origin': A list or array representing the origin coordinates [x, y, z].
+            - 'deltas': A list of three lists or arrays, each representing a delta vector.
+        rotation_matrix (list or numpy.ndarray): A 3x3 matrix representing the rotation 
+            to be applied.
+        translation_vector (list or numpy.ndarray): A 3-element vector representing the 
+            translation to be applied.
+    Returns:
+        dict: A new dictionary containing the transformed DX data with updated 'origin' 
+        and 'deltas'.
+    Raises:
+        ValueError: If the input data does not conform to the expected structure or 
+        dimensions.
     """
     dx_data_copy = copy.deepcopy(dx_data)
 
@@ -104,9 +150,27 @@ def apply_transformation_to_dx(dx_data, rotation_matrix, translation_vector):
 
 def get_dx_bounding_box(origin, deltas, counts):
     """
-    Computes min and max corners of a .dx file in XYZ space.
-    Returns:
-        min_corner, max_corner: numpy arrays of shape (3,)
+    Computes the minimum and maximum corners of a 3D grid defined in a .dx file.
+    This function calculates the bounding box of a 3D grid in XYZ space based on 
+    the origin, grid spacing (deltas), and grid dimensions (counts). The bounding 
+    box is represented by the minimum and maximum corners.
+    Parameters:
+        origin (array-like): A list or array of shape (3,) representing the XYZ 
+            coordinates of the grid's origin.
+        deltas (array-like): A list of three lists or arrays, each of shape (3,), 
+            representing the grid spacing vectors along the X, Y, and Z axes.
+        counts (tuple): A tuple of three integers (nx, ny, nz) representing the 
+            number of grid points along the X, Y, and Z axes.
+        tuple: A tuple containing two numpy arrays of shape (3,):
+            - min_corner: The XYZ coordinates of the minimum corner of the bounding box.
+            - max_corner: The XYZ coordinates of the maximum corner of the bounding box.
+    Example:
+        origin = [0.0, 0.0, 0.0]
+        deltas = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        counts = (10, 10, 10)
+        min_corner, max_corner = get_dx_bounding_box(origin, deltas, counts)
+        # min_corner: [0.0, 0.0, 0.0]
+        # max_corner: [9.0, 9.0, 9.0]
     """
     nx, ny, nz = counts
     grid_vectors = np.array([
@@ -132,8 +196,18 @@ def get_dx_bounding_box(origin, deltas, counts):
 
 def determine_common_grid(dx_files, grid_spacing=1.0):
     """
-    Determines the common grid origin, unit deltas, and counts to cover all .dx files.
-    All deltas are set to 1.0 in each axis (no rotation/skew).
+    Determines a common grid that encompasses the bounding boxes of multiple DX files.
+        This function calculates the minimum and maximum corners of the bounding boxes
+        of the provided DX files, and then defines a grid that covers the entire region
+        with the specified grid spacing.
+        Parameters:
+            dx_files (list of str): A list of file paths to DX files to be processed.
+            grid_spacing (float, optional): The spacing between grid points. Defaults to 1.0.
+        Returns:
+            tuple: A tuple containing:
+                - origin (tuple of float): The coordinates of the origin of the common grid.
+                - deltas (list of tuple of float): The grid spacing in each direction.
+                - counts (tuple of int): The number of grid points along each axis.
     """
     min_corner = np.array([np.inf, np.inf, np.inf])
     max_corner = np.array([-np.inf, -np.inf, -np.inf])
@@ -157,10 +231,44 @@ def determine_common_grid(dx_files, grid_spacing=1.0):
     return tuple(origin), deltas, counts
 
 
+def manual_common_grid(grid_spacing=1.0):
+    """
+    """
+    # np.array([-56.849905,-56.735858,-71.109253])
+    # np.array([58.711823,63.72384,49.654039])
+    min_corner = np.array([-60,-60,-75])
+    max_corner = np.array([65,70,70])
+
+    origin = min_corner
+    deltas = [(grid_spacing, 0.0, 0.0),
+              (0.0, grid_spacing, 0.0),
+              (0.0, 0.0, grid_spacing)]
+
+    counts = tuple(np.ceil((max_corner - min_corner) / grid_spacing).astype(int) + 1)
+    return tuple(origin), deltas, counts
+    
+
+
 def interpolate_to_grid(origin, deltas, counts, data_array, new_origin, new_deltas, new_counts):
     """
-    Efficient interpolation from an arbitrarily oriented regular grid to another.
-    Assumes both grids are rectilinear (structured).
+    Interpolates a 3D data array from one grid to another using trilinear interpolation.
+
+    Parameters:
+        origin (array-like): The physical coordinates of the origin of the original grid (length 3).
+        deltas (array-like): A 3x3 array where each row represents the spacing vectors of the original grid.
+        counts (tuple of int): The number of grid points along each axis (nx, ny, nz) in the original grid.
+        data_array (numpy.ndarray): The 3D array of data values defined on the original grid.
+        new_origin (array-like): The physical coordinates of the origin of the new grid (length 3).
+        new_deltas (array-like): A 3x3 array where each row represents the spacing vectors of the new grid.
+        new_counts (tuple of int): The number of grid points along each axis (ni, nj, nk) in the new grid.
+
+    Returns:
+        numpy.ndarray: A 3D array of interpolated data values defined on the new grid.
+
+    Notes:
+        - The function uses `scipy.interpolate.RegularGridInterpolator` for interpolation.
+        - Out-of-bounds values in the new grid are filled with 0.0.
+        - The transformation between physical space and index space is computed using the provided grid spacing vectors.
     """
     # Step 1: Build transformation matrix from index space (i,j,k) to physical space
     transform = np.stack(deltas, axis=1)  # Shape (3, 3)
