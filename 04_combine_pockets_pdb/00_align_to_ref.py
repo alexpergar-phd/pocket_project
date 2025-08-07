@@ -385,6 +385,10 @@ for index, dynid_result in enumerate(dynids_results):
         except FileNotFoundError as e:
             print(f"[ERROR] PDB file for dynid {dynid} not found: {e}", file=log_fh)
             continue
+        except UnboundLocalError as e:
+            print(f"[ERROR] There was a problem with {dynid}: {e}", file=log_fh)
+            continue
+
 
         # Save the results to the CSV file.
         csv_results = {}
