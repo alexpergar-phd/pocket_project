@@ -189,7 +189,7 @@ def extract_ids(file):
 
 # Main
 # Blank grid.
-grid_obj = create_grid(MIN_CORNER, MAX_CORNER-MIN_CORNER, spacing=1)
+grid_obj = create_grid(MIN_CORNER, MAX_CORNER-MIN_CORNER, spacing=2)
 
 # Iterate through all pocket PDB files in the directory.
 for pdb in os.listdir(pockets_dir):
