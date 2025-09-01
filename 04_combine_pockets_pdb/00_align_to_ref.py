@@ -39,7 +39,7 @@ import requests
 import fnmatch
 
 
-# Paths to run locally.
+# Paths to run locally (OUTDATED).
 # ROOT_GPCRMD = "/files_gpcrmd"
 # TMP_DIR = "/home/alex/Desktop"
 # REFERENCE_GPCR = "/home/alex/Desktop/static/reference_gpcr/a2a_6gdg_opm_rotated.pdb"
@@ -47,17 +47,25 @@ import fnmatch
 # RESULTS_DIR = '/home/alex/Desktop/dx_transformation/00_aligning_and_transforming'
 
 # Paths to run in cluster.
+PROJECT_ROOT = "/home/alex/Documents/pocket_tool"
 ROOT_GPCRMD = "/files_gpcrmd"
 TMP_DIR = "/home/aperalta/Desktop"
-REFERENCE_GPCR = "/home/aperalta/combine_pockets/static/a2a_6gdg_opm_rotated.pdb"
 CHIMERA = "/soft/system/software/Chimera/1.16/bin/chimera"
-RESULTS_DIR = '/home/aperalta/combine_pockets/results'
-
-# Constants
-TM_RESIDS_REF = "1-34,39-69,73-108,117-142,173-213,219-259,266-291" 
-# ^-- Obtained by extracting it from GPCRdb GPCR "aa2ar_human".
-
+RESULTS_DIR = "/home/aperalta/combine_pockets/results"
 COMPL_INFO_PATH = os.path.join(ROOT_GPCRMD, "Precomputed/compl_info.json")
+
+REFERENCE_GPCRS = {
+    "A": "/home/aperalta/combine_pockets/static/classA_a2a_6gdg_rotated.pdb",
+    "B1": "/home/aperalta/combine_pockets/static/classB1_glp1r_5vew_rotated.pdb",
+    "C": "/home/aperalta/combine_pockets/static/classC_mglur5_6ffi_rotated.pdb",
+    "F": "/home/aperalta/combine_pockets/static/classF_smo_4jkv_rotated.pdb"
+}
+TM_RESIDS_REF = {
+    "A": "1-34,39-69,73-108,117-142,173-213,219-259,266-291",  # From 6GDG
+    "B1": "136-168,175-202,224-256,263-291,304-336,345-370,381-405",  # From 5VEW
+    "C": "579-606,615-632,641-672,850-874,897-920,930-953,958-987",  # From 6FFI
+    "F": "224-254,264-285,313-343,360-378,397-424,451-476,515-537"   # From 4JKV
+}
 
 
 # Arguments
@@ -66,49 +74,11 @@ to_index = int(sys.argv[2])
 
 
 # Functions.
-def get_target_dynids():
-    """
-    This is the list of dynIDs that have pockets generated. It is obtained
-    from the GPCRmd database.
-    """
-    return [10, 100, 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008,
-    1009, 101, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019,
-    102, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 103,
-    1030, 1031, 1032, 1033, 104, 1049, 105, 106, 107, 108, 109, 11, 110,
-    1105, 1106, 1107, 1108, 1109, 111, 1110, 1111, 112, 113, 114, 115, 116,
-    117, 118, 119, 12, 120, 121, 122, 123, 124, 125, 126, 1269, 127, 1270,
-    1271, 1272, 1273, 1274, 1275, 128, 129, 13, 130, 131, 132, 133, 134, 135,
-    136, 137, 138, 139, 14, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
-    15, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 16, 160, 161, 162,
-    163, 164, 165, 166, 167, 168, 169, 17, 170, 171, 172, 173, 174, 175, 176,
-    177, 178, 179, 18, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 19,
-    190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 20, 200, 201, 202, 203,
-    204, 205, 21, 22, 23, 234, 237, 238, 239, 24, 240, 241, 242, 243, 244,
-    245, 247, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 4,
-    40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
-    58, 59, 6, 60, 61, 62, 63, 64, 65, 66, 67, 68, 687, 688, 689, 69, 690,
-    691, 692, 693, 694, 695, 696, 697, 698, 699, 7, 70, 700, 702, 703, 704,
-    705, 706, 707, 708, 709, 71, 710, 711, 712, 713, 714, 715, 716, 717, 718,
-    719, 72, 720, 721, 722, 723, 724, 725, 726, 727, 728, 729, 73, 730, 731,
-    732, 733, 734, 735, 736, 737, 738, 739, 74, 740, 741, 742, 743, 744, 745,
-    746, 748, 749, 75, 750, 751, 752, 753, 754, 755, 756, 757, 758, 759, 76,
-    760, 761, 762, 763, 764, 765, 766, 767, 768, 769, 77, 770, 771, 772, 773,
-    774, 775, 777, 778, 779, 78, 781, 782, 783, 784, 785, 786, 787, 788, 789,
-    79, 790, 791, 792, 793, 794, 795, 796, 797, 799, 8, 80, 800, 801, 802,
-    803, 804, 805, 806, 807, 808, 809, 81, 810, 811, 812, 813, 814, 815, 816,
-    817, 818, 819, 82, 820, 821, 822, 823, 824, 825, 826, 827, 828, 829, 83,
-    830, 831, 832, 833, 834, 835, 836, 837, 838, 839, 84, 840, 841, 842, 843,
-    844, 845, 846, 847, 848, 849, 85, 850, 851, 852, 853, 854, 855, 856, 857,
-    858, 859, 86, 860, 861, 862, 863, 864, 865, 866, 869, 87, 870, 871, 872,
-    873, 874, 875, 876, 877, 878, 879, 88, 880, 881, 884, 885, 886, 887, 888,
-    889, 89, 890, 891, 892, 893, 894, 895, 896, 897, 898, 899, 90, 900, 901,
-    902, 903, 904, 905, 906, 908, 909, 91, 910, 911, 912, 913, 914, 915, 916,
-    917, 918, 919, 92, 920, 921, 922, 923, 924, 925, 926, 927, 928, 929, 93,
-    930, 931, 932, 933, 934, 935, 936, 937, 938, 939, 94, 940, 941, 943, 944,
-    945, 946, 947, 949, 95, 950, 951, 952, 953, 954, 955, 956, 957, 958, 959,
-    96, 960, 961, 962, 963, 964, 965, 966, 967, 968, 97, 970, 971, 973, 975,
-    976, 977, 978, 979, 98, 980, 981, 982, 983, 984, 985, 986, 987, 988, 989,
-    99, 990, 991, 992, 993, 994, 995, 996, 997, 998, 999]
+def read_dynids():
+    dynids_path = os.path.join(PROJECT_ROOT, "data/working_sims/data/dynids.csv")
+    with open(dynids_path, 'r') as file:
+        dynids = file.read().splitlines()
+    return dynids
 
 
 def read_json_into_dict(json_path):
@@ -135,7 +105,7 @@ def request_gpcrmd(dynid):
         return None
 
 
-def chimera_align(target_pdb, pocket_pdbs, tm_resids_target_sel, dynid, trajid):
+def chimera_align(target_pdb, pocket_pdbs, tm_resids_target_sel, dynid, trajid, target_class):
     """
     Aligns the target GPCR PDB and its associated pocket PDBs to a reference GPCR structure
     using UCSF Chimera's 'mm' command.
@@ -170,10 +140,10 @@ def chimera_align(target_pdb, pocket_pdbs, tm_resids_target_sel, dynid, trajid):
         copy_and_write_script += f'write relative 0 #{str(index+2)} {aligned_pocket_path};\n'
 
     chimera_script = (
-        f'open {REFERENCE_GPCR}; '                    # Model #0
+        f'open {REFERENCE_GPCRS[target_class]}; '     # Model #0
         f'open {target_pdb}; '                        # Model #1
         + open_pockets_script                         # Open all pocket PDBs
-        + f'mm #1:{tm_resids_target_sel} #0:{TM_RESIDS_REF}; '  # Align model #1 to #0
+        + f'mm #1:{tm_resids_target_sel} #0:{TM_RESIDS_REF[target_class]}; '  # Align model #1 to #0
         + f'select #1 & protein; write selected relative 0 #1 {aligned_pdb_path};' # Save aligned target GPCR
         + copy_and_write_script                       # Apply same transformation to all pockets and save them
     )
@@ -282,7 +252,7 @@ def find(pattern, path):
 
 ### MAIN ###
 # Get the target dynids.
-target_dynids = get_target_dynids()
+target_dynids = read_dynids()
 
 # Read the GPCRmd data into a dictionary.
 compl_info = read_json_into_dict(COMPL_INFO_PATH)
@@ -367,6 +337,12 @@ for index, dynid_result in enumerate(dynids_results):
     tm_resids_sel = dynid_result['tm_resids_sel']
     is_apoform = dynid_result['is_apoform']
     gpcrmd_data = dynid_result['gpcrmd_data']
+
+    # Get the target class for the reference GPCR and TM residues used.
+    if gpcrmd_data['class_name'] == None:
+        print(f"[ERROR] No class found for dynID {dynid}.", file=log_fh)
+        continue
+    target_class = gpcrmd_data['class_name'].split(" ")[1]
 
     # For each trajectory...
     for trajid_result in dynid_result['trajid_results']:
