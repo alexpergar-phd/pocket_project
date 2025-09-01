@@ -47,18 +47,19 @@ import fnmatch
 # RESULTS_DIR = '/home/alex/Desktop/dx_transformation/00_aligning_and_transforming'
 
 # Paths to run in cluster.
-PROJECT_ROOT = "/home/alex/Documents/pocket_tool"
+PROJECT_ROOT = "/home/aperalta/Documents/pocket_tool"
 ROOT_GPCRMD = "/files_gpcrmd"
 TMP_DIR = "/home/aperalta/Desktop"
 CHIMERA = "/soft/system/software/Chimera/1.16/bin/chimera"
-RESULTS_DIR = "/home/aperalta/combine_pockets/results"
+RESULTS_DIR = "/home/aperalta/Documents/pocket_tool/results/04_combine_pockets_pdb/00_aligning"
 COMPL_INFO_PATH = os.path.join(ROOT_GPCRMD, "Precomputed/compl_info.json")
 
+REFERENCE_GPCR_DIR = "/home/aperalta/Documents/pocket_tool/data/ref_gpcr/data"
 REFERENCE_GPCRS = {
-    "A": "/home/aperalta/combine_pockets/static/classA_a2a_6gdg_rotated.pdb",
-    "B1": "/home/aperalta/combine_pockets/static/classB1_glp1r_5vew_rotated.pdb",
-    "C": "/home/aperalta/combine_pockets/static/classC_mglur5_6ffi_rotated.pdb",
-    "F": "/home/aperalta/combine_pockets/static/classF_smo_4jkv_rotated.pdb"
+    "A": os.path.join(REFERENCE_GPCR_DIR, "classA_a2a_6gdg_rotated.pdb"),
+    "B1": os.path.join(REFERENCE_GPCR_DIR, "classB1_glp1r_5vew_rotated.pdb"),
+    "C": os.path.join(REFERENCE_GPCR_DIR, "classC_mglur5_6ffi_rotated.pdb"),
+    "F": os.path.join(REFERENCE_GPCR_DIR, "classF_smo_4jkv_rotated.pdb")
 }
 TM_RESIDS_REF = {
     "A": "1-34,39-69,73-108,117-142,173-213,219-259,266-291",  # From 6GDG
@@ -356,7 +357,8 @@ for index, dynid_result in enumerate(dynids_results):
                 pocket_pdbs=pockets_pdbs,
                 tm_resids_target_sel=tm_resids_sel,
                 dynid=dynid,
-                trajid=trajid
+                trajid=trajid,
+                target_class=target_class
             )
         except FileNotFoundError as e:
             print(f"[ERROR] PDB file for dynid {dynid} not found: {e}", file=log_fh)

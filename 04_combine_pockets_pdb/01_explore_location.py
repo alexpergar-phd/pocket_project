@@ -1,4 +1,7 @@
 """
+WARNING: This script aligns to the Class A reference structure (A2A receptor),
+so it should only be used for Class A GPCRs.
+
 This script analyzes pocket structures in GPCRs by processing aligned pocket
 PDB files and extracting geometric and spatial features.
 Main functionalities:
