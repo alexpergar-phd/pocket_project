@@ -24,11 +24,38 @@ import numpy as np
 MIN_CORNER = np.array([-60,-60,-75])
 MAX_CORNER = np.array([65,70,70])
 
-# Arguments.
-pockets_dir = "/home/alex/Desktop/aligned_pdbs_test" # Directory containing input PDB files.
-output_pdb = "output_grid.pdb" # Output filename for the combined grid.
+
+# Arguments."
+# Directory containing input PDB files.
+pockets_dir = "/home/aperalta/Documents/pocket_tool/results/04_combine_pockets_pdb/00_aligning/aligned/aligned_pockets"
+# Alignment CSV file path.
+align_csv = "/home/aperalta/Documents/pocket_tool/results/04_combine_pockets_pdb/00_aligning/align.csv"
+# Output directory.
+output_dir = "/home/aperalta/Documents/pocket_tool/results/04_combine_pockets_pdb/01_joining"
+
 
 # Functions.
+def get_dynids_for_class(gpcr_class, align_csv):
+    """
+    Reads the alignment CSV file and returns a list of dynamic IDs for the specified GPCR class.
+    Parameters:
+        gpcr_class (str): The GPCR class to filter by (e.g., "Class A (Rhodopsin)").
+        align_csv (str): Path to the alignment CSV file.
+    Returns:
+        List[str]: A list of dynamic IDs corresponding to the specified GPCR class.
+    """
+    dynids = []
+    with open(align_csv, 'r') as file:
+        lines = file.readlines()
+    
+    for line in lines[1:]:
+        fields = line.strip().split(';')
+        if fields[6] == gpcr_class:
+            dynids.append(fields[0])
+
+    return dynids
+
+
 def create_grid(origin, dims, spacing):
     """
     Creates a grid object with the specified origin, dimensions, and spacing.
@@ -188,37 +215,53 @@ def extract_ids(file):
 
 
 # Main
-# Blank grid.
-grid_obj = create_grid(MIN_CORNER, MAX_CORNER-MIN_CORNER, spacing=2)
+for gpcr_class in ["Class A (Rhodopsin)", "Class B1 (Secretin)", "Class C (Glutamate)", "Class F (Frizzled)"]:
+    dynids = get_dynids_for_class(gpcr_class, align_csv)
 
-# Iterate through all pocket PDB files in the directory.
-for pdb in os.listdir(pockets_dir):
-    pocket_file = os.path.join(pockets_dir, pdb)
+    # Blank grid.
+    grid_obj = create_grid(MIN_CORNER, MAX_CORNER-MIN_CORNER, spacing=2)
 
-    dynid, trajid, pocketid = extract_ids(pocket_file)
+    # Iterate through all pocket PDB files in the directory.
+    for pdb in os.listdir(pockets_dir):
+        pocket_file = os.path.join(pockets_dir, pdb)
 
-    if trajid not in grid_obj['trajids']:
-        grid_obj['trajids'].append(trajid)
+        dynid, trajid, pocketid = extract_ids(pocket_file)
 
-    if dynid not in grid_obj['dynids']:
-        grid_obj['dynids'].append(dynid)
+        # Include only the dynamic IDs of the specified GPCR class.
+        if dynid not in dynids:
+            continue
 
-    # Extract grid from the PDB file and add it to common grid.
-    grid = extract_grid(pocket_file, grid_obj)
-    grid_obj['grid'] += grid
-    grid_obj['n_pockets_summed'] += 1
+        # Append dynid and trajid info to grid object.
+        if trajid not in grid_obj['trajids']:
+            grid_obj['trajids'].append(trajid)
+        if dynid not in grid_obj['dynids']:
+            grid_obj['dynids'].append(dynid)
 
-# Output the result.
-write_grid_to_pdb(grid_obj, "output_grid.pdb")
+        # Extract grid from the PDB file and add it to common grid.
+        grid = extract_grid(pocket_file, grid_obj)
+        grid_obj['grid'] += grid
+        grid_obj['n_pockets_summed'] += 1
 
-print("Grid written to output_grid.pdb")
-print("Number of dynamic IDs:", len(grid_obj['dynids']))
-print("Number of trajectories summed:", len(grid_obj['trajids']))
-print("Number of pockets summed:", grid_obj['n_pockets_summed'])
-print("Grid origin:", grid_obj['origin'])
-print("Grid dimensions:", grid_obj['dims'])
-print("Grid spacing:", grid_obj['spacing'])
-print("Grid shape:", grid_obj['grid'].shape)
-print("Grid data type:", grid_obj['grid'].dtype)
-print("Dynamic IDs:", grid_obj['dynids'])
-print("Trajectory IDs:", grid_obj['trajids'])
+    # Output the result.
+    gpcr_class_renamed = gpcr_class.replace(' ', '_').replace('(', '').replace(')', '')
+
+    write_grid_to_pdb(
+        grid_obj,
+        os.path.join(output_dir, f"{gpcr_class_renamed}_grid.pdb")
+    )
+
+    summary_file_path = os.path.join(
+        output_dir, f"{gpcr_class_renamed}_grid_summary.txt"
+    )
+    with open(summary_file_path, 'w') as summary_file:
+        summary_file.write(f"Grid written to {gpcr_class_renamed}_grid.pdb\n")
+        summary_file.write(f"Number of dynamic IDs: {len(grid_obj['dynids'])}\n")
+        summary_file.write(f"Number of trajectories summed: {len(grid_obj['trajids'])}\n")
+        summary_file.write(f"Number of pockets summed: {grid_obj['n_pockets_summed']}\n")
+        summary_file.write(f"Grid origin: {grid_obj['origin']}\n")
+        summary_file.write(f"Grid dimensions: {grid_obj['dims']}\n")
+        summary_file.write(f"Grid spacing: {grid_obj['spacing']}\n")
+        summary_file.write(f"Grid shape: {grid_obj['grid'].shape}\n")
+        summary_file.write(f"Grid data type: {grid_obj['grid'].dtype}\n")
+        summary_file.write(f"Dynamic IDs: {', '.join(grid_obj['dynids'])}\n")
+        summary_file.write(f"Trajectory IDs: {', '.join(grid_obj['trajids'])}\n")
