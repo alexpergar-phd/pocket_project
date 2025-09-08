@@ -39,13 +39,6 @@ import requests
 import fnmatch
 
 
-# Paths to run locally (OUTDATED).
-# ROOT_GPCRMD = "/files_gpcrmd"
-# TMP_DIR = "/home/alex/Desktop"
-# REFERENCE_GPCR = "/home/alex/Desktop/static/reference_gpcr/a2a_6gdg_opm_rotated.pdb"
-# CHIMERA = "/home/alex/.local/UCSF-Chimera64-1.17.3/bin/chimera"
-# RESULTS_DIR = '/home/alex/Desktop/dx_transformation/00_aligning_and_transforming'
-
 # Paths to run in cluster.
 PROJECT_ROOT = "/home/aperalta/Documents/pocket_tool"
 ROOT_GPCRMD = "/files_gpcrmd"
@@ -56,14 +49,14 @@ COMPL_INFO_PATH = os.path.join(ROOT_GPCRMD, "Precomputed/compl_info.json")
 
 REFERENCE_GPCR_DIR = "/home/aperalta/Documents/pocket_tool/data/ref_gpcr/data"
 REFERENCE_GPCRS = {
-    "A": os.path.join(REFERENCE_GPCR_DIR, "classA_a2a_6gdg_rotated.pdb"),
+    "A": os.path.join(REFERENCE_GPCR_DIR, "classA_adrb2_2rh1_rotated.pdb"),
     "B1": os.path.join(REFERENCE_GPCR_DIR, "classB1_glp1r_5vew_rotated.pdb"),
     "C": os.path.join(REFERENCE_GPCR_DIR, "classC_mglur5_6ffi_rotated.pdb"),
     "F": os.path.join(REFERENCE_GPCR_DIR, "classF_smo_4jkv_rotated.pdb")
 }
 TM_RESIDS_REF = {
-    "A": "1-34,39-69,73-108,117-142,173-213,219-259,266-291",  # From 6GDG
-    "B1": "136-168,175-202,224-256,263-291,304-336,345-370,381-405",  # From 5VEW
+    "A": "23-60,37-68,102-137,146-172,196-237,262-299,304-328",      # From 2RH1
+    "B1": "136-168,175-202,224-256,263-291,304-336,345-370,381-405", # From 5VEW
     "C": "579-606,615-632,641-672,850-874,897-920,930-953,958-987",  # From 6FFI
     "F": "224-254,264-285,313-343,360-378,397-424,451-476,515-537"   # From 4JKV
 }

@@ -39,7 +39,7 @@ import fnmatch
 
 # Paths
 aligned_pockets_dir = "/home/alex/Desktop/aligned_pdbs_test"
-ref_structure = "/home/alex/Documents/pocket_tool/data/ref_gpcr/data/a2a_6gdg_opm_rotated.pdb"
+ref_structure = "/home/alex/Documents/pocket_tool/data/ref_gpcr/data/classA_adrb2_2rh1_rotated.pdb"
 
 
 # Constants for cylinder that denotes the central region of the GPCR.

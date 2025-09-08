@@ -76,7 +76,8 @@ def create_grid(origin, dims, spacing):
         'grid': np.zeros(num_points, dtype=int),
         'dynids': [],
         'trajids': [],
-        'n_pockets_summed': 0
+        'n_pockets_summed': 0,
+        'traj_contributors': {}  # Maps (x,y,z) -> set of trajectory IDs
     }
 
 
@@ -105,24 +106,27 @@ def read_pocket_coordinates(pdb_file):
     return coordinates
 
 
-def extract_grid(filepath, grid_obj):
+def extract_grid(filepath, grid_obj, trajid):
     """
-    Extracts a grid from a file and returns it.
+    Extracts a grid from a file and returns it along with trajectory information.
     Parameters:
         filepath (str): Path to the file containing pocket coordinates.
         grid_obj (dict): The grid object to which the coordinates will be added.
+        trajid (str): The trajectory ID for tracking which trajectories contribute to each grid point.
     Returns:
-        np.ndarray: A 3D numpy array representing the grid with occupancy counts.
-    The grid is initialized to zeros and updated with occupancy counts based on the
-    coordinates read from the file.
-    The coordinates are mapped to the grid based on the grid's origin and spacing.
-    If a coordinate is outside the grid bounds, it is ignored.
-    The occupancy count for each grid point is incremented based on the number of
-    coordinates that fall within that grid point.
+        tuple: A tuple containing:
+            - np.ndarray: A 3D numpy array representing the grid with binary occupancy (0 or 1).
+            - dict: A dictionary mapping grid coordinates to sets of trajectory IDs.
+    The grid is initialized to zeros and updated with binary occupancy based on the
+    coordinates read from the file. Each grid point is marked as 1 if any atoms from
+    this pocket occupy it, regardless of how many atoms are there.
     """
     grid = np.zeros(grid_obj['grid'].shape, dtype=int)
+    traj_contributors = {}
 
     pocket_coords = read_pocket_coordinates(filepath)
+    occupied_points = set()
+    
     for coord in pocket_coords:
 
         # Check if the coordinate is within the grid bounds.
@@ -141,10 +145,18 @@ def extract_grid(filepath, grid_obj):
         grid_y = int((coord[1] - grid_obj['origin'][1]) / grid_obj['spacing'])
         grid_z = int((coord[2] - grid_obj['origin'][2]) / grid_obj['spacing'])
 
-        # Update the grid
-        grid[grid_x, grid_y, grid_z] += 1
+        # Track unique grid points occupied by this pocket
+        occupied_points.add((grid_x, grid_y, grid_z))
+    
+    # Mark occupied grid points and track trajectory contributors
+    for grid_x, grid_y, grid_z in occupied_points:
+        grid[grid_x, grid_y, grid_z] = 1
+        coord_key = (grid_x, grid_y, grid_z)
+        if coord_key not in traj_contributors:
+            traj_contributors[coord_key] = set()
+        traj_contributors[coord_key].add(trajid)
         
-    return grid
+    return grid, traj_contributors
 
 
 def write_grid_to_pdb(grid_obj, output_pdb):
@@ -154,17 +166,16 @@ def write_grid_to_pdb(grid_obj, output_pdb):
     Parameters:
         grid_obj (dict): The grid object containing the grid data.
         output_pdb (str): Path to the output PDB file.
-        min_threshold (float): Minimum occupancy threshold for writing atoms.
-        max_threshold (float): Maximum occupancy threshold for writing atoms.
     Returns:
         None
     This function iterates through the grid and writes each atom to the PDB file
-    if its occupancy is within the specified thresholds.
+    if its occupancy is greater than zero.
     The coordinates are calculated using the grid center, which provides a more
     accurate representation of the original coordinates.
     The PDB file is formatted according to the fixed-width columns required by the
     PDB format, including atom serial number, atom type, occupancy, and coordinates.
-    The occupancy is normalized by the number of trajectories summed in the grid.
+    The occupancy is calculated as the percentage of trajectories that have pockets
+    contributing to each grid point, ensuring values between 0 and 1.
     """
     with open(output_pdb, 'w') as file:
         atom_serial = 1
@@ -175,7 +186,13 @@ def write_grid_to_pdb(grid_obj, output_pdb):
                     if occupancy == 0:
                         continue
 
-                    perc_occupancy = occupancy/len(grid_obj['trajids'])
+                    # Calculate percentage based on number of trajectories that contribute to this grid point
+                    coord_key = (x, y, z)
+                    if coord_key in grid_obj['traj_contributors']:
+                        n_contributing_trajs = len(grid_obj['traj_contributors'][coord_key])
+                        perc_occupancy = n_contributing_trajs / len(grid_obj['trajids'])
+                    else:
+                        perc_occupancy = 0.0
                     # if perc_occupancy < min_threshold or perc_occupancy > max_threshold:
                     #     continue
 
@@ -238,9 +255,15 @@ for gpcr_class in ["Class A (Rhodopsin)", "Class B1 (Secretin)", "Class C (Gluta
             grid_obj['dynids'].append(dynid)
 
         # Extract grid from the PDB file and add it to common grid.
-        grid = extract_grid(pocket_file, grid_obj)
+        grid, traj_contributors = extract_grid(pocket_file, grid_obj, trajid)
         grid_obj['grid'] += grid
         grid_obj['n_pockets_summed'] += 1
+        
+        # Merge trajectory contributors
+        for coord_key, contributors in traj_contributors.items():
+            if coord_key not in grid_obj['traj_contributors']:
+                grid_obj['traj_contributors'][coord_key] = set()
+            grid_obj['traj_contributors'][coord_key].update(contributors)
 
     # Output the result.
     gpcr_class_renamed = gpcr_class.replace(' ', '_').replace('(', '').replace(')', '')
