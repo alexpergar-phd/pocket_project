@@ -27,15 +27,14 @@ Z_BOTTOM = -22
 MIN_DISTANCE_THRESHOLD = 5.0
 
 # TM residues for the ADRB2 receptor (PDB ID: 2RH1).
-TM1_RESIDS = list(range(26, 60))
-TM2_RESIDS = list(range(37, 68))
-TM3_RESIDS = list(range(102, 137))
-TM4_RESIDS = list(range(146, 172))
-TM5_RESIDS = list(range(196, 237))
-TM6_RESIDS = list(range(262, 299))
-TM7_RESIDS = list(range(304, 328))
-H8_RESIDS = list(range(329, 343))
-every_tm_coords = [TM1_RESIDS, TM2_RESIDS, TM3_RESIDS, TM4_RESIDS, TM5_RESIDS, TM6_RESIDS, TM7_RESIDS, H8_RESIDS]
+TM1_RESIDS = list(range(26, 62))
+TM2_RESIDS = list(range(66, 98))
+TM3_RESIDS = list(range(102, 138))
+TM4_RESIDS = list(range(146, 173))
+TM5_RESIDS = list(range(196, 238))
+TM6_RESIDS = list(range(262, 300))
+TM7_RESIDS = list(range(304, 329))
+H8_RESIDS = list(range(329, 341))
 
 
 # Functions.
@@ -140,7 +139,7 @@ def min_distance_between_sets(set1, set2):
     return min_distance
 
 
-def get_tm_contacts(pocket_coords, all_tm_coords, distance_threshold):
+def get_tm_contacts(pocket_coords, ca_coordinates, distance_threshold):
     """
     Determines which transmembrane helices (TM1-TM7, H8) are in contact with a
     given pocket based on a distance threshold.
@@ -156,10 +155,7 @@ def get_tm_contacts(pocket_coords, all_tm_coords, distance_threshold):
         with the pocket. If no contacts are found, returns ["None"].
     """
     contact_with = []
-    for tm_coords, tm_name in zip(
-        all_tm_coords,
-        ["tm1", "tm2", "tm3", "tm4", "tm5", "tm6", "tm7", "h8"]
-    ):
+    for tm_name, tm_coords in ca_coordinates.items():
         min_distance = min_distance_between_sets(pocket_coords, tm_coords)
         if min_distance < distance_threshold:
             contact_with.append(tm_name)
@@ -211,21 +207,52 @@ def read_ca_coordinates_per_helix(pdb_file):
         coordinates = [x, y, z]
 
         if resid in TM1_RESIDS:
-            ca_coordinates.setdefault("TM1", []).append(coordinates)
+            ca_coordinates.setdefault("tm1", []).append(coordinates)
         elif resid in TM2_RESIDS:
-            ca_coordinates.setdefault("TM2", []).append(coordinates)
+            ca_coordinates.setdefault("tm2", []).append(coordinates)
         elif resid in TM3_RESIDS:
-            ca_coordinates.setdefault("TM3", []).append(coordinates)
+            ca_coordinates.setdefault("tm3", []).append(coordinates)
         elif resid in TM4_RESIDS:
-            ca_coordinates.setdefault("TM4", []).append(coordinates)
+            ca_coordinates.setdefault("tm4", []).append(coordinates)
         elif resid in TM5_RESIDS:
-            ca_coordinates.setdefault("TM5", []).append(coordinates)
+            ca_coordinates.setdefault("tm5", []).append(coordinates)
         elif resid in TM6_RESIDS:
-            ca_coordinates.setdefault("TM6", []).append(coordinates)
+            ca_coordinates.setdefault("tm6", []).append(coordinates)
         elif resid in TM7_RESIDS:
-            ca_coordinates.setdefault("TM7", []).append(coordinates)
+            ca_coordinates.setdefault("tm7", []).append(coordinates)
+        elif resid in H8_RESIDS:
+            ca_coordinates.setdefault("h8", []).append(coordinates)
 
     return ca_coordinates
+
+
+def shrink_ca_towards_center(closest_cas, center_coord, shrink_distance):
+    """
+    Shrinks the positions of C-alpha atoms towards the geometric center by a
+    specified distance.
+    Parameters:
+        closest_cas (List[Tuple[float, float, float]]): A list of C-alpha
+        coordinates (x, y, z).
+        center_coord (Tuple[float, float, float]): The geometric center (x, y, z).
+        shrink_distance (float): The distance to shrink each C-alpha towards the center.
+    Returns:
+        List[Tuple[float, float, float]]: A list of new C-alpha coordinates
+        after shrinking."""
+    shrunk_cas = []
+    for closest_ca in closest_cas:
+        ca2center = calculate_2point_vector(center_coord, closest_ca)
+        length = np.linalg.norm(ca2center)
+        if length > shrink_distance:
+            scale = (length - shrink_distance) / length
+            new_ca = [
+                center_coord[0] + ca2center[0] * scale,
+                center_coord[1] + ca2center[1] * scale,
+                center_coord[2] + ca2center[2] * scale,
+            ]
+        else:
+            new_ca = closest_ca  # If the distance is less than shrink_distance, don't move it
+        shrunk_cas.append(new_ca)
+    return shrunk_cas
 
 
 def get_closest_ca_per_helix(target_coord, ca_coordinates):
@@ -238,7 +265,9 @@ def get_closest_ca_per_helix(target_coord, ca_coordinates):
     Returns:
         List[Tuple[float, float, float]]: A list of closest C-alpha coordinates"""
     closest_coords = []
-    for helix, coords in ca_coordinates.items():
+    for helix_name, coords in ca_coordinates.items():
+        if helix_name in ["tm1", "tm4", "h8"]:
+            continue  # Skip TM1, TM4, and H8 as they are far from the core
         closest = min(coords, key=lambda c: ((c[0] - target_coord[0]) ** 2 + (c[1] - target_coord[1]) ** 2 + (c[2] - target_coord[2]) ** 2) ** 0.5)
         closest_coords.append(closest)
     return closest_coords
@@ -280,10 +309,6 @@ def check_if_pocket_is_centered(pocket_center, closest_cas, interior_center):
 # Read the C-alpha coordinates per helix from the reference structure.
 ca_coordinates = read_ca_coordinates_per_helix(ref_structure)
 
-# Remove TM1 and TM4 from consideration as they are far from the core.
-del ca_coordinates["TM4"]
-del ca_coordinates["TM1"]
-
 # Print the header for the output table.
 print("dynid;trajid;pocketid;is_centered;z_location;tm_contacts")
 
@@ -300,6 +325,11 @@ for pocket_pdb in find("*pocket*_tmaligned.pdb", aligned_pockets_dir):
     closest_cas = get_closest_ca_per_helix(pocket_center, ca_coordinates)
     interior_center = calculate_geometric_center(closest_cas)
 
+    # Shrink the closest C-alpha coordinates towards the interior center to
+    # lower the number of pockets in the interior.
+    closest_cas = shrink_ca_towards_center(closest_cas, interior_center,
+                                           shrink_distance=3.0)
+
     # Check if the pocket is centered within the protein core.
     is_centered = check_if_pocket_is_centered(pocket_center, 
                                               closest_cas, interior_center)
@@ -308,7 +338,7 @@ for pocket_pdb in find("*pocket*_tmaligned.pdb", aligned_pockets_dir):
     z_location = get_z_location(Z_TOP, Z_MIDDLE, Z_BOTTOM, pocket_center)
 
     # Get the transmembrane contacts for the pocket.
-    tm_contacts = get_tm_contacts(pocket_coordinates, every_tm_coords, MIN_DISTANCE_THRESHOLD)
+    tm_contacts = get_tm_contacts(pocket_coordinates, ca_coordinates, MIN_DISTANCE_THRESHOLD)
 
     # Print the results in a semicolon-separated format.
     print(f"{dynid};{trajid};{pocketid};{is_centered};{z_location};{'_'.join(tm_contacts)}")
