@@ -1,19 +1,22 @@
 """
 The objective of this script is to detect the cryptic pockets based on the 
-volume oscillation.
+volume oscillation. Every pocket is analyzed through the trajectory and its
+volume values are extracted from the descriptor files. These values are then
+smoothed using a moving average to reduce noise. Based on the smoothed volume
+values, the openness of the pocket is determined using predefined thresholds.
 """
 
 
 import os
+
 import fnmatch
 import pandas as pd
-import matplotlib.pyplot as plt
 import re
 
 
 # Args
-pocket_dir = "/home/alex/Desktop/pockets_mounted/"
-output_dir = "/home/alex/Desktop/pockets_mounted/cryptic_pockets/"
+pocket_dir = "/home/aperalta/sshfs_mountpoints/mdpocket_oversized"
+output_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/00_detecting_based_on_volume/output_251020b"
 
 
 # Functions
@@ -217,7 +220,28 @@ def extract_ids(path):
     else:
         print(f"Could not extract all required IDs from the path: {path}.")
         return None, None, None
-    
+
+
+def count_transitions(volumes_opening):
+    """
+    Calculate the transiency of pocket openings. A transition is defined as a 
+    change from closed to open or vice versa.
+
+    Args:
+        volumes_opening (list): List of openness states ('open', 'closed',
+            'inter').
+
+    Returns:
+        float: Transiency value calculated as the number of transitions
+        divided by the total number of frames.
+    """
+    n_transitions = 0
+    volumes_opening = [state for state in volumes_opening if state != 'inter']
+    for i in range(1, len(volumes_opening)):
+        if volumes_opening[i] != volumes_opening[i - 1]:
+            n_transitions += 1
+    return n_transitions
+
 
 # Main
 df_dict = {
@@ -229,6 +253,7 @@ df_dict = {
     'perc_open': [],
     'perc_closed': [],
     'perc_inter': [],
+    'n_transitions': [],
 }
 
 for index, file in enumerate(find("pocket_num_*_descriptors.txt", pocket_dir)):
@@ -253,6 +278,7 @@ for index, file in enumerate(find("pocket_num_*_descriptors.txt", pocket_dir)):
         clusters = cluster_by_opening(volumes_opening)
         n_closed_start = get_n_closed_at_start(clusters)
         n_max_open = get_max_n_open(clusters)
+        n_transitions = count_transitions(volumes_opening)
 
         # Store the results in the dictionary
         df_dict['dyn_id'].append(dyn_id)
@@ -263,6 +289,7 @@ for index, file in enumerate(find("pocket_num_*_descriptors.txt", pocket_dir)):
         df_dict['perc_open'].append(perc_state['open'])
         df_dict['perc_closed'].append(perc_state['closed'])
         df_dict['perc_inter'].append(perc_state['inter'])
+        df_dict['n_transitions'].append(n_transitions)
 
         # if index == 20: # for testing purposes, limit to 20 files
         #     break
