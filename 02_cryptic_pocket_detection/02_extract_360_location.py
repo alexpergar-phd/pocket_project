@@ -11,7 +11,7 @@ import pandas as pd
 
 
 # Arguments
-pocket_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/02_selecting_10percent/00_aligning/output_251020/aligned_pdbs/aligned_pockets/"
+pocket_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/02_selecting_10percent/00_aligning/output_251022/aligned_pdbs/aligned_pockets/"
 outdir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/02_selecting_10percent/01_360location"
 
 

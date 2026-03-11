@@ -16,10 +16,47 @@ import re
 
 # Args
 pocket_dir = "/home/aperalta/sshfs_mountpoints/mdpocket_oversized"
-output_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/00_detecting_based_on_volume/output_251020b"
+output_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/00_detecting_based_on_volume/output_251022"
 
+PROJECT_ROOT = "/home/aperalta/Documents/pocket_tool"
 
 # Functions
+def read_dynid_trajids(project_root):
+    """
+    Read the dynid-trajid mapping file and return a dictionary where each key is
+    a dynid and each value is a list of associated trajids.
+    """
+    trajid_dict = {}
+    trajids_path = os.path.join(PROJECT_ROOT, "data/working_sims/data/dynids_trajids.csv")
+    with open(trajids_path, 'r') as file:
+        next(file) # Skip header line
+        for line in file:
+            dynid, trajid = line.strip().split(';')
+            if dynid in trajid_dict:
+                trajid_dict[dynid].append(trajid)
+            else:
+                trajid_dict[dynid] = [trajid]
+    return trajid_dict
+
+
+def is_in_our_set(dynids_trajids, dyn_id, traj_id):
+    """
+    Check if the given dyn_id and traj_id are in our list of pockets.
+    Args:
+        dynids_trajids (dict): Dictionary with dyn_ids as keys and lists of
+            traj_ids as values.
+        dyn_id (str): The dyn_id to check.
+        traj_id (str): The traj_id to check.
+    """
+    if traj_id == None:
+        return False
+    if dyn_id not in dynids_trajids.keys():
+        return False
+    if traj_id not in dynids_trajids[dyn_id]:
+        return False
+    return True
+
+
 def read_descriptors_file(file_path):
     """
     Read a tab-separated file and return a dictionary where each key is a
@@ -256,15 +293,20 @@ df_dict = {
     'n_transitions': [],
 }
 
+# Load our dynids and trajids.
+dynids_trajids = read_dynid_trajids(PROJECT_ROOT)
+
 for index, file in enumerate(find("pocket_num_*_descriptors.txt", pocket_dir)):
-    # Files are duplicated (and wrong) in this folder. Skip.
-    if "/MDpocket2/" in file:
-        continue
+    # Files are duplicated (and wrong) in this folder. Skip. Not neccesary anymore.
+    # if "/MDpocket2/" in file:
+    #     continue
 
     try:
         # Extract IDs from the file path
         traj_id, dyn_id, pocket_id = extract_ids(file)
-        if traj_id == None:
+
+        # Skip if not in our set.
+        if not is_in_our_set(dynids_trajids, dyn_id, traj_id):
             continue
 
         # Get the volumes and smooth them

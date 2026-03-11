@@ -13,8 +13,8 @@ import subprocess
 
 
 #~~ Constants ~~#
-input_csv_path = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/00_detecting_based_on_volume/output_251020/cryptic_pockets_filtered_10perc.csv"
-results_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/02_selecting_10percent/00_aligning/output_251020"
+input_csv_path = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/00_detecting_based_on_volume/output_251022/cryptic_pockets_filtered_10perc.csv"
+results_dir = "/home/aperalta/Documents/pocket_tool/results/02_cryptic_pocket_detection/02_selecting_10percent/00_aligning/output_251022"
 
 
 #~~ Constants ~~#
